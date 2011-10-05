@@ -133,8 +133,9 @@ class Command(NoArgsCommand):
                         job.bury()
                         break
                     else:
-                        logger.info('Releasing job')
-                        job.release(delay=releases * 10)
+                        delay = releases * 60
+                        logger.info('Releasing job with delay %ds' % delay)
+                        job.release(delay=delay)
                 else:
                     job.delete()
                     break
