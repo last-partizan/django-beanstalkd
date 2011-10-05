@@ -128,7 +128,7 @@ class Command(NoArgsCommand):
                     logger.debug("%s:%s" % (tp.__name__, value))
                     logger.debug("\n".join(traceback.format_tb(tb)))
                     releases = job.stats()['releases']
-                    if releases > BEANSTALK_JOB_FAILED_RETRY:
+                    if releases >= BEANSTALK_JOB_FAILED_RETRY:
                         logger.info('Burying job')
                         job.bury()
                         break
