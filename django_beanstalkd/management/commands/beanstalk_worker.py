@@ -8,6 +8,8 @@ from django.conf import settings
 from django.core.management.base import NoArgsCommand
 from django_beanstalkd import connect_beanstalkd
 
+BEANSTALK_JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
+BEANSTALK_JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
 
 logger = logging.getLogger('django_beanstalkd')
 logger.addHandler(logging.StreamHandler())
@@ -55,13 +57,8 @@ class Command(NoArgsCommand):
             # determine right name to register function with
             app = job.app
             jobname = job.__name__
-            try:
-                func = settings.BEANSTALK_JOB_NAME % {
-                    'app': app,
-                    'job': jobname,
-                }
-            except AttributeError:
-                func = '%s.%s' % (app, jobname)
+            func = BEANSTALK_JOB_NAME % {
+                    'app': app, 'job': jobname}
             self.jobs[func] = job
             logger.info("* %s" % func)
 
@@ -104,35 +101,43 @@ class Command(NoArgsCommand):
 
     def work(self):
         """children only: watch tubes for all jobs, start working"""
-        beanstalk = connect_beanstalkd()
+        self._beanstalk = connect_beanstalkd()
         for job in self.jobs.keys():
-            beanstalk.watch(job)
-        beanstalk.ignore('default')
+            self._beanstalk.watch(job)
+        self._beanstalk.ignore('default')
         
         try:
             while True:
-                job = beanstalk.reserve()
-                job_name = job.stats()['tube']
-                if job_name in self.jobs:
-                    logger.debug("Calling %s with arg: %s" % (job_name, job.body))
-                    try:
-                        self.jobs[job_name](job.body)
-                    except Exception, e:
-                        tp, value, tb = sys.exc_info()
-                        logger.error('Error while calling "%s" with arg "%s": '
-                            '%s' % (
-                                job_name,
-                                job.body,
-                                e,
-                            )
-                        )
-                        logger.debug("%s:%s" % (tp.__name__, value))
-                        logger.debug("\n".join(traceback.format_tb(tb)))
-                        job.bury()
-                    else:
-                        job.delete()
-                else:
-                    job.release()
-            
+                self._worker()
         except KeyboardInterrupt:
             sys.exit(0)
+
+    def _worker(self):
+        while True:
+            job = self._beanstalk.reserve()
+            job_name = job.stats()['tube']
+            if job_name in self.jobs:
+                logger.debug("Calling %s with arg: %s" % (job_name, job.body))
+                try:
+                    self.jobs[job_name](job.body)
+                except Exception, e:
+                    tp, value, tb = sys.exc_info()
+                    logger.error('Error while calling "%s" with arg "%s": '
+                        '%s' % (job_name, job.body, e)
+                    )
+                    logger.debug("%s:%s" % (tp.__name__, value))
+                    logger.debug("\n".join(traceback.format_tb(tb)))
+                    releases = job.stats()['releases']
+                    if releases > BEANSTALK_JOB_FAILED_RETRY:
+                        logger.info('Burying job')
+                        job.bury()
+                        break
+                    else:
+                        logger.info('Releasing job')
+                        job.release(delay=releases * 10)
+                else:
+                    job.delete()
+                    break
+            else:
+                job.release()
+                break
