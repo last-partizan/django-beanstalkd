@@ -1,0 +1,8 @@
+*.swp
+*.mo
+*.swo
+*.bak
+*.xz
+*~
+*.py[oc]
+.ropeproject
