@@ -1,7 +1,6 @@
 import logging
 from optparse import make_option
-import os
-import sys
+import sys, os, signal
 import traceback
 
 from django.conf import settings
@@ -68,6 +67,7 @@ class Command(NoArgsCommand):
             assert(worker_count > 0)
         except (ValueError, AssertionError):
             worker_count = 1
+        self.register_sigterm_handler()
         self.spawn_workers(worker_count)
 
         # start working
@@ -77,6 +77,14 @@ class Command(NoArgsCommand):
                 os.waitpid(child, 0)
         except KeyboardInterrupt:
             sys.exit(0)
+
+    def register_sigterm_handler(self):
+        """Stop child processes after receiving SIGTERM"""
+        def handler(sig, func=None):
+            for child in self.children:
+                os.kill(child, signal.SIGINT)
+            sys.exit(0)
+        signal.signal(signal.SIGTERM, handler)
 
     def spawn_workers(self, worker_count):
         """
