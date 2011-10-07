@@ -16,6 +16,8 @@ logger.addHandler(logging.StreamHandler())
 class Command(NoArgsCommand):
     help = "Start a Beanstalk worker serving all registered Beanstalk jobs"
     __doc__ = help
+    can_import_settings = True
+    requires_model_validation = True
     option_list = NoArgsCommand.option_list + (
         make_option('-w', '--workers', action='store', dest='worker_count',
                     default='1', help='Number of workers to spawn.'),
@@ -125,26 +127,27 @@ class Command(NoArgsCommand):
             job = self._beanstalk.reserve()
             job_name = job.stats()['tube']
             if job_name in self.jobs:
-                logger.debug("Calling %s with arg: %s" % (job_name, job.body))
+                logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
                 try:
                     self.jobs[job_name](job.body)
-                except Exception, e:
+                except:
                     tp, value, tb = sys.exc_info()
                     logger.error('Error while calling "%s" with arg "%s": '
-                        '%s' % (job_name, job.body, e)
+                        '%s' % (job_name, job.body, value)
                     )
                     logger.debug("%s:%s" % (tp.__name__, value))
                     logger.debug("\n".join(traceback.format_tb(tb)))
                     releases = job.stats()['releases']
                     if releases >= BEANSTALK_JOB_FAILED_RETRY:
-                        logger.info('Burying job')
+                        logger.info('j:%s, failed->bury')
                         job.bury()
                         break
                     else:
                         delay = releases * 60
-                        logger.info('Releasing job with delay %ds' % delay)
+                        logger.info('j:%s, failed->retry with delay %ds' % (job.jid, delay))
                         job.release(delay=delay)
                 else:
+                    logger.debug("j:%s, done->delete" % job.jid)
                     job.delete()
                     break
             else:
