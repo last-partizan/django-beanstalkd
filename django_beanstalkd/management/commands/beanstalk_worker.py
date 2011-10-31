@@ -139,7 +139,7 @@ class Command(NoArgsCommand):
                     logger.debug("\n".join(traceback.format_tb(tb)))
                     releases = job.stats()['releases']
                     if releases >= BEANSTALK_JOB_FAILED_RETRY:
-                        logger.info('j:%s, failed->bury')
+                        logger.info('j:%s, failed->bury' % job.jid)
                         job.bury()
                         break
                     else:
