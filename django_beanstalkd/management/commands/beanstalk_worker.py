@@ -117,19 +117,24 @@ class Command(NoArgsCommand):
             return self.work(job_list)
 
         # spawn children and make them work (hello, 19th century!)
-        def make_worker(jobs):
+        def make_worker(name, jobs):
             child = os.fork()
             if child:
                 self.children.append(child)
                 return
             else:
-                self.work()
+                BeanstalkWorker(name, jobs).work()
         for i in range(worker_count):
-            make_worker(job_list)
+            make_worker('default', job_list)
         for key, job_list in workers.items():
             for i in range(self.get_workers_count(key)):
-                make_worker(job_list)
+                make_worker(key, job_list)
         logger.info("Spawned %d workers" % len(self.children))
+
+class BeanstalkWorker(object):
+    def __init__(self, name, jobs):
+        self.name = name
+        self.jobs = jobs
 
     def work(self):
         """children only: watch tubes for all jobs, start working"""
