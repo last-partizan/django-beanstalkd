@@ -7,6 +7,9 @@ import time
 
 from django_beanstalkd import beanstalk_job
 
+beanstalk_options = {
+    "workers": {"worker_example": 2}
+}
 
 @beanstalk_job
 def background_counting(arg):
@@ -19,3 +22,7 @@ def background_counting(arg):
     for i in range(1, value+1):
         print '[%s] %d' % (pid, i)
         time.sleep(1)
+
+@beanstalk_job(worker='worker_example')
+def something_useful(arg):
+    pass

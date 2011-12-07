@@ -12,8 +12,8 @@ from django_beanstalkd import connect_beanstalkd, BeanstalkError
 
 BEANSTALK_JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
 BEANSTALK_JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
-BEANSTALK_DICTONNECTED_RETRY_AFTER = getattr(
-        settings, 'BEANSTALK_DICTONNECTED_RETRY_AFTER', 30)
+BEANSTALK_DISCONNECTED_RETRY_AFTER = getattr(
+        settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
 
 logger = logging.getLogger('django_beanstalkd')
 logger.addHandler(logging.StreamHandler())
@@ -50,22 +50,29 @@ class Command(NoArgsCommand):
 
         # find all jobs
         jobs = []
+        beanstalk_options = {}
         for bs_module in bs_modules:
             try:
                 jobs += bs_module.beanstalk_job_list
+                beanstalk_options.update(bs_module.beanstalk_jobs.beanstalk_options)
             except AttributeError:
                 pass
         if not jobs:
             logger.error("No beanstalk jobs found!")
             return
+        self.beanstalk_options = beanstalk_options
         logger.info("Available jobs:")
+        workers = {'default': {}}
         for job in jobs:
             # determine right name to register function with
             app = job.app
             jobname = job.__name__
             func = BEANSTALK_JOB_NAME % {
                     'app': app, 'job': jobname}
-            self.jobs[func] = job
+            try:
+                workers[job.worker][func] = job
+            except KeyError:
+                workers[job.worker] = {func: job}
             logger.info("* %s" % func)
 
         # spawn all workers and register all jobs
@@ -73,9 +80,10 @@ class Command(NoArgsCommand):
             worker_count = int(options['worker_count'])
             assert(worker_count > 0)
         except (ValueError, AssertionError):
-            worker_count = 1
+            worker_count = self.get_workers_count('default')
+
         self.register_sigterm_handler()
-        self.spawn_workers(worker_count)
+        self.spawn_workers(workers, worker_count)
 
         # start working
         logger.info("Starting to work... (press ^C to exit)")
@@ -85,6 +93,9 @@ class Command(NoArgsCommand):
         except KeyboardInterrupt:
             sys.exit(0)
 
+    def get_workers_count(self, worker):
+        return self.beanstalk_options.get('workers', {}).get(worker, 1)
+
     def register_sigterm_handler(self):
         """Stop child processes after receiving SIGTERM"""
         def handler(sig, func=None):
@@ -93,26 +104,32 @@ class Command(NoArgsCommand):
             sys.exit(0)
         signal.signal(signal.SIGTERM, handler)
 
-    def spawn_workers(self, worker_count):
+    def spawn_workers(self, workers, worker_count):
         """
         Spawn as many workers as desired (at least 1).
         Accepts:
+        - workers, {'default': job_list}
         - worker_count, positive int
         """
         # no need for forking if there's only one worker
-        if worker_count == 1:
-            return self.work()
+        job_list = workers.pop('default')
+        if worker_count == 1 and not workers:
+            return self.work(job_list)
 
-        logger.info("Spawning %s worker(s)" % worker_count)
         # spawn children and make them work (hello, 19th century!)
-        for i in range(worker_count):
+        def make_worker(jobs):
             child = os.fork()
             if child:
                 self.children.append(child)
-                continue
+                return
             else:
                 self.work()
-                break
+        for i in range(worker_count):
+            make_worker(job_list)
+        for key, job_list in workers.items():
+            for i in range(self.get_workers_count(key)):
+                make_worker(job_list)
+        logger.info("Spawned %d workers" % len(self.children))
 
     def work(self):
         """children only: watch tubes for all jobs, start working"""
@@ -125,7 +142,7 @@ class Command(NoArgsCommand):
                 sys.exit(0)
             except beanstalkc.SocketError, e:
                 logger.error("disconnected: %s" % e)
-                sleep(BEANSTALK_DICTONNECTED_RETRY_AFTER)
+                sleep(BEANSTALK_DISCONNECTED_RETRY_AFTER)
                 try:
                     self.init_beanstalk()
                 except BeanstalkError, e:

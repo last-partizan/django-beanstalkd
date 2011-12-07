@@ -1,12 +1,13 @@
-class beanstalk_job(object):
+class _beanstalk_job(object):
     """
     Decorator marking a function inside some_app/beanstalk_jobs.py as a
     beanstalk job
     """
 
-    def __init__(self, f):
+    def __init__(self, f, worker):
         self.f = f
         self.__name__ = f.__name__
+        self.worker = worker
         
         # determine app name
         parts = f.__module__.split('.')
@@ -26,3 +27,8 @@ class beanstalk_job(object):
     def __call__(self, arg):
         # call function with argument passed by the client only
         return self.f(arg)
+
+def beanstalk_job(func=None, worker="default"):
+    def decorator(func):
+        return _beanstalk_job(func, worker)
+    return decorator(func) if func else decorator

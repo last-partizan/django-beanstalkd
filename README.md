@@ -64,7 +64,11 @@ use the `-w` option:
 
     python manage.py beanstalk_worker -w 5
 
-will start five workers.
+will start five workers. Option -w is for 'default' worker. You can mark job
+for running in different worker by passing argument `worker` to decorator.
+Also you can set workers count like this (in `beanstalk_jobs.py`).
+    
+    beanstalk_options = {"workers": {"name": 2}}
 
 Since the process will keep running while waiting for and executing jobs,
 you probably want to run this in a _screen_ session or similar.
