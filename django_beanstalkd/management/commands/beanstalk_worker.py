@@ -114,7 +114,7 @@ class Command(NoArgsCommand):
         # no need for forking if there's only one worker
         job_list = workers.pop('default')
         if worker_count == 1 and not workers:
-            return self.work(job_list)
+            return BeanstalkWorker('default', job_list).work()
 
         # spawn children and make them work (hello, 19th century!)
         def make_worker(name, jobs):
@@ -170,6 +170,8 @@ class BeanstalkWorker(object):
             logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
             try:
                 self.jobs[job_name](job.body)
+            except KeyboardInterrupt:
+                raise
             except:
                 tp, value, tb = sys.exc_info()
                 logger.error('Error while calling "%s" with arg "%s": '
