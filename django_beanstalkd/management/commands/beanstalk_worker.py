@@ -1,14 +1,19 @@
 import logging
 from optparse import make_option
+from time import sleep
 import sys, os, signal
 import traceback
 
+import beanstalkc
+
 from django.conf import settings
 from django.core.management.base import NoArgsCommand
-from django_beanstalkd import connect_beanstalkd
+from django_beanstalkd import connect_beanstalkd, BeanstalkError
 
 BEANSTALK_JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
 BEANSTALK_JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
+BEANSTALK_DICTONNECTED_RETRY_AFTER = getattr(
+        settings, 'BEANSTALK_DICTONNECTED_RETRY_AFTER', 30)
 
 logger = logging.getLogger('django_beanstalkd')
 logger.addHandler(logging.StreamHandler())
@@ -111,45 +116,57 @@ class Command(NoArgsCommand):
 
     def work(self):
         """children only: watch tubes for all jobs, start working"""
+        self.init_beanstalk()
+
+        while True:
+            try:
+                self._worker()
+            except KeyboardInterrupt:
+                sys.exit(0)
+            except beanstalkc.SocketError, e:
+                logger.error("disconnected: %s" % e)
+                sleep(BEANSTALK_DICTONNECTED_RETRY_AFTER)
+                try:
+                    self.init_beanstalk()
+                except BeanstalkError, e:
+                    logger.error("reconnection failed: %s" % e)
+                else:
+                    logger.debug("reconnected")
+            except Exception, e:
+                logger.exception(e)
+
+    def init_beanstalk(self):
         self._beanstalk = connect_beanstalkd()
         for job in self.jobs.keys():
             self._beanstalk.watch(job)
         self._beanstalk.ignore('default')
-        
-        try:
-            while True:
-                self._worker()
-        except KeyboardInterrupt:
-            sys.exit(0)
 
     def _worker(self):
-        while True:
-            job = self._beanstalk.reserve()
-            job_name = job.stats()['tube']
-            if job_name in self.jobs:
-                logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
-                try:
-                    self.jobs[job_name](job.body)
-                except:
-                    tp, value, tb = sys.exc_info()
-                    logger.error('Error while calling "%s" with arg "%s": '
-                        '%s' % (job_name, job.body, value)
-                    )
-                    logger.debug("%s:%s" % (tp.__name__, value))
-                    logger.debug("\n".join(traceback.format_tb(tb)))
-                    releases = job.stats()['releases']
-                    if releases >= BEANSTALK_JOB_FAILED_RETRY:
-                        logger.info('j:%s, failed->bury' % job.jid)
-                        job.bury()
-                        break
-                    else:
-                        delay = releases * 60
-                        logger.info('j:%s, failed->retry with delay %ds' % (job.jid, delay))
-                        job.release(delay=delay)
+        job = self._beanstalk.reserve()
+        job_name = job.stats()['tube']
+        if job_name in self.jobs:
+            logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
+            try:
+                self.jobs[job_name](job.body)
+            except:
+                tp, value, tb = sys.exc_info()
+                logger.error('Error while calling "%s" with arg "%s": '
+                    '%s' % (job_name, job.body, value)
+                )
+                logger.debug("%s:%s" % (tp.__name__, value))
+                logger.debug("\n".join(traceback.format_tb(tb)))
+                releases = job.stats()['releases']
+                if releases >= BEANSTALK_JOB_FAILED_RETRY:
+                    logger.info('j:%s, failed->bury' % job.jid)
+                    job.bury()
+                    return
                 else:
-                    logger.debug("j:%s, done->delete" % job.jid)
-                    job.delete()
-                    break
+                    delay = releases * 60
+                    logger.info('j:%s, failed->retry with delay %ds' % (job.jid, delay))
+                    job.release(delay=delay)
             else:
-                job.release()
-                break
+                logger.debug("j:%s, done->delete" % job.jid)
+                job.delete()
+                return
+        else:
+            job.release()
