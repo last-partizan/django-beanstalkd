@@ -29,6 +29,8 @@ class Command(NoArgsCommand):
         make_option('-l', '--log-level', action='store', dest='log_level',
                     default='info', help='Log level of worker process (one of '
                     '"debug", "info", "warning", "error")'),
+        make_option('-m', '--module', action='store', dest='module',
+                    default='', help='Module to load beanstalk_jobs from'),
     )
     children = [] # list of worker processes
     jobs = {}
@@ -39,11 +41,14 @@ class Command(NoArgsCommand):
 
         # find beanstalk job modules
         bs_modules = []
-        for app in settings.INSTALLED_APPS:
-            try:
-                bs_modules.append(__import__("%s.beanstalk_jobs" % app))
-            except ImportError:
-                pass
+        if not options['module']:
+            for app in settings.INSTALLED_APPS:
+                try:
+                    bs_modules.append(__import__("%s.beanstalk_jobs" % app))
+                except ImportError:
+                    pass
+        else:
+            bs_modules.append(__import__("%s.beanstalk_jobs" % options["module"]))
         if not bs_modules:
             logger.error("No beanstalk_jobs modules found!")
             return
@@ -121,11 +126,11 @@ class Command(NoArgsCommand):
             child = os.fork()
             if child:
                 self.children.append(child)
-                return
             else:
                 BeanstalkWorker(name, jobs).work()
-        for i in range(worker_count):
-            make_worker('default', job_list)
+        if job_list:
+            for i in range(worker_count):
+                make_worker('default', job_list)
         for key, job_list in workers.items():
             for i in range(self.get_workers_count(key)):
                 make_worker(key, job_list)
