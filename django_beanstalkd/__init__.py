@@ -29,6 +29,9 @@ class BeanstalkError(Exception):
 class BeanstalkClient(object):
     """beanstalk client, automatically connecting to server"""
 
+    def __init__(self, **kwargs):
+        self._beanstalk = connect_beanstalkd()
+
     def call(self, func, arg='', priority=DEFAULT_PRIORITY, delay=0, ttr=DEFAULT_TTR):
         """
         Calls the specified function (in beanstalk terms: put the specified arg
@@ -40,7 +43,7 @@ class BeanstalkClient(object):
         ttr: how many seconds a worker has to process the job before it gets requeued
         """
         self._beanstalk.use(func)
-        self._beanstalk.put(str(arg), priority=priority, delay=delay, ttr=ttr)
+        return self._beanstalk.put(str(arg), priority=priority, delay=delay, ttr=ttr)
 
-    def __init__(self, **kwargs):
-        self._beanstalk = connect_beanstalkd()
+    def peek(self, jid):
+        return self._beanstalk.peek(jid)
