@@ -174,7 +174,7 @@ class BeanstalkWorker(object):
         if job_name in self.jobs:
             logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
             try:
-                self.jobs[job_name](job.body)
+                self.jobs[job_name](job)
             except KeyboardInterrupt:
                 raise
             except:

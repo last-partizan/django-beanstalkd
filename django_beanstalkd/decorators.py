@@ -9,11 +9,12 @@ class _beanstalk_job(object):
     beanstalk job
     """
 
-    def __init__(self, f, worker, json=False):
+    def __init__(self, f, worker, json=False, takes_job=False):
         self.f = f
         self.__name__ = f.__name__
         self.worker = worker
         self.json = json
+        self.takes_job = takes_job
         
         # determine app name
         parts = f.__module__.split('.')
@@ -30,15 +31,19 @@ class _beanstalk_job(object):
         except AttributeError:
             bs_module.beanstalk_job_list = [self]
 
-    def __call__(self, arg):
-        # call function with argument passed by the client only
+    def __call__(self, job):
+        args, kwargs = (), {}
+        if self.takes_job:
+            args += (job,)
         if self.json:
-            return self.f(**json_mod.loads(arg))
-        return self.f(arg)
+            kwargs = json_mod.loads(job.body)
+        else:
+            args += (job.body,)
+        return self.f(*args, **kwargs)
 
-def beanstalk_job(func=None, worker="default", json=False):
+def beanstalk_job(func=None, worker="default", json=False, takes_job=False):
     if json and not json_mod:
         raise RuntimeError("`json` module not found, so you can not use json kwargs.")
     def decorator(func):
-        return _beanstalk_job(func, worker, json)
+        return _beanstalk_job(func, worker, json, takes_job)
     return decorator(func) if func else decorator
