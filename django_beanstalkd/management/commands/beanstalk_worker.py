@@ -14,6 +14,7 @@ BEANSTALK_JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
 BEANSTALK_JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
 BEANSTALK_DISCONNECTED_RETRY_AFTER = getattr(
         settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
+BEANSTALK_RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
 
 logger = logging.getLogger('django_beanstalkd')
 logger.addHandler(logging.StreamHandler())
@@ -170,9 +171,16 @@ class BeanstalkWorker(object):
 
     def _worker(self):
         job = self._beanstalk.reserve()
-        job_name = job.stats()['tube']
+        stats = job.stats()
+        job_name = stats['tube']
         if job_name in self.jobs:
             logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
+            if BEANSTALK_RESERVE_TIMEOUT:
+                age = stats['age'] - stats['delay']
+                if age >= BEANSTALK_RESERVE_TIMEOUT:
+                    logger.warning("j:%s, i'm too old for this shit. Job age > BEANSTALK_RESERVE_TIMEOUT. ->buried.")
+                    job.bury()
+                    return
             try:
                 self.jobs[job_name](job)
             except KeyboardInterrupt:
@@ -184,7 +192,7 @@ class BeanstalkWorker(object):
                 )
                 logger.debug("%s:%s" % (tp.__name__, value))
                 logger.debug("\n".join(traceback.format_tb(tb)))
-                releases = job.stats()['releases']
+                releases = stats['releases']
                 if releases >= BEANSTALK_JOB_FAILED_RETRY:
                     logger.info('j:%s, failed->bury' % job.jid)
                     job.bury()
