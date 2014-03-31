@@ -18,7 +18,7 @@ BEANSTALK_RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
 
 logger = logging.getLogger('django_beanstalkd')
 _stream = logging.StreamHandler()
-_stream.setFormatter(logging.Formatter('%(asctime)s: %(name)s:%(levelname)s: %(message)s'))
+_stream.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(message)s'))
 logger.addHandler(_stream)
 
 class Command(NoArgsCommand):
