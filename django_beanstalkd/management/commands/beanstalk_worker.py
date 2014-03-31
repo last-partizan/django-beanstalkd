@@ -17,7 +17,9 @@ BEANSTALK_DISCONNECTED_RETRY_AFTER = getattr(
 BEANSTALK_RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
 
 logger = logging.getLogger('django_beanstalkd')
-logger.addHandler(logging.StreamHandler())
+_stream = logging.StreamHandler()
+_stream.setFormatter(logging.Formatter('%(asctime)s: %(name)s:%(levelname)s: %(message)s'))
+logger.addHandler(_stream)
 
 class Command(NoArgsCommand):
     help = "Start a Beanstalk worker serving all registered Beanstalk jobs"
