@@ -180,7 +180,7 @@ class BeanstalkWorker(object):
             if BEANSTALK_RESERVE_TIMEOUT:
                 age = stats['age'] - stats['delay']
                 if age >= BEANSTALK_RESERVE_TIMEOUT:
-                    logger.warning("j:%s, i'm too old for this shit. Job age > BEANSTALK_RESERVE_TIMEOUT. ->buried.")
+                    logger.warning("j:%s, i'm too old for this shit. Job age > BEANSTALK_RESERVE_TIMEOUT. ->buried.", job.jid)
                     job.bury()
                     return
             try:
