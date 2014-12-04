@@ -127,6 +127,13 @@ class Command(NoArgsCommand):
         # spawn children and make them work (hello, 19th century!)
         def make_worker(name, jobs):
             child = os.fork()
+            try:
+                # reinit crypto modules after fork
+                # http://stackoverflow.com/questions/16981503/pycrypto-assertionerrorpid-check-failed-rng-must-be-re-initialized-after-fo
+                import Crypto
+                Crypto.Random.atfork()
+            except:
+                pass
             if child:
                 self.children.append(child)
             else:
