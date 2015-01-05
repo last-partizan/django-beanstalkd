@@ -1,3 +1,5 @@
+from django import db
+
 try:
     import json as json_mod
 except:
@@ -9,12 +11,13 @@ class _beanstalk_job(object):
     beanstalk job
     """
 
-    def __init__(self, f, worker, json=False, takes_job=False):
+    def __init__(self, f, worker, json=False, takes_job=False, require_db=False):
         self.f = f
         self.__name__ = f.__name__
         self.worker = worker
         self.json = json
         self.takes_job = takes_job
+        self.require_db = require_db
         
         # determine app name
         parts = f.__module__.split('.')
@@ -33,6 +36,8 @@ class _beanstalk_job(object):
 
     def __call__(self, job):
         args, kwargs = (), {}
+        if self.require_db:
+            db.close_old_connections()
         if self.takes_job:
             args += (job,)
         if self.json:
@@ -41,9 +46,9 @@ class _beanstalk_job(object):
             args += (job.body,)
         return self.f(*args, **kwargs)
 
-def beanstalk_job(func=None, worker="default", json=False, takes_job=False):
+def beanstalk_job(func=None, worker="default", json=False, takes_job=False, require_db=False):
     if json and not json_mod:
         raise RuntimeError("`json` module not found, so you can not use json kwargs.")
     def decorator(func):
-        return _beanstalk_job(func, worker, json, takes_job)
+        return _beanstalk_job(func, worker, json, takes_job, require_db)
     return decorator(func) if func else decorator
