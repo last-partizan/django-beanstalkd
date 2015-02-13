@@ -205,13 +205,9 @@ class BeanstalkWorker(object):
                 self.jobs[job_name](job)
             except KeyboardInterrupt:
                 raise
-            except:
-                tp, value, tb = sys.exc_info()
-                logger.error('Error while calling "%s" with arg "%s": '
-                    '%s' % (job_name, job.body, value)
-                )
-                logger.debug("%s:%s" % (tp.__name__, value))
-                logger.debug("\n".join(traceback.format_tb(tb)))
+            except Exception, e:
+                logger.debug(u"%s:%s: job failed (%s)", job.jid, job_name, e)
+                logger.exception(e)
                 releases = stats['releases']
                 if releases >= BEANSTALK_JOB_FAILED_RETRY:
                     logger.info('j:%s, failed->bury' % job.jid)
