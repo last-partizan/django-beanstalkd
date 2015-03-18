@@ -1,9 +1,6 @@
 from django import db
 
-try:
-    import json as json_mod
-except:
-    json_mod = None
+import json_decoder
 
 class _beanstalk_job(object):
     """
@@ -41,14 +38,12 @@ class _beanstalk_job(object):
         if self.takes_job:
             args += (job,)
         if self.json:
-            kwargs = json_mod.loads(job.body)
+            kwargs = json_decoder.loads(job.body)
         else:
             args += (job.body,)
         return self.f(*args, **kwargs)
 
 def beanstalk_job(func=None, worker="default", json=False, takes_job=False, require_db=False):
-    if json and not json_mod:
-        raise RuntimeError("`json` module not found, so you can not use json kwargs.")
     def decorator(func):
         return _beanstalk_job(func, worker, json, takes_job, require_db)
     return decorator(func) if func else decorator
