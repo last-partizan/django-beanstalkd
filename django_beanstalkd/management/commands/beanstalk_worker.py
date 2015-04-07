@@ -2,7 +2,7 @@ import logging
 from optparse import make_option
 from time import sleep
 import sys, os, signal
-import traceback
+import importlib
 
 import beanstalkc
 
@@ -47,11 +47,11 @@ class Command(NoArgsCommand):
         if not options['module']:
             for app in settings.INSTALLED_APPS:
                 try:
-                    bs_modules.append(__import__("%s.beanstalk_jobs" % app))
+                    bs_modules.append(importlib.import_module("%s.beanstalk_jobs" % app))
                 except ImportError:
                     pass
         else:
-            bs_modules.append(__import__("%s.beanstalk_jobs" % options["module"]))
+            bs_modules.append(importlib.import_module("%s.beanstalk_jobs" % options["module"]))
         if not bs_modules:
             logger.error("No beanstalk_jobs modules found!")
             return
