@@ -1,3 +1,5 @@
+import importlib
+
 from django import db
 
 import json_decoder
@@ -25,7 +27,7 @@ class _beanstalk_job(object):
             self.app = ''
 
         # store function in per-app job list (to be picked up by a worker)
-        bs_module = __import__(f.__module__)
+        bs_module = importlib.import_module(f.__module__)
         try:
             if self not in bs_module.beanstalk_job_list:
                 bs_module.beanstalk_job_list.append(self)
