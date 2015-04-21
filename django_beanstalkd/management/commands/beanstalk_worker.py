@@ -183,8 +183,9 @@ class BeanstalkWorker(object):
         stats = job.stats()
         job_name = stats['tube']
         if job_name in self.jobs:
+            job_obj = self.jobs[job_name]
             logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
-            if BEANSTALK_RESERVE_TIMEOUT:
+            if BEANSTALK_RESERVE_TIMEOUT and not job_obj.ignore_reserve_timeout:
                 age = stats['age'] - stats['delay']
                 if age >= BEANSTALK_RESERVE_TIMEOUT:
                     logger.warning(
@@ -202,7 +203,7 @@ class BeanstalkWorker(object):
                     job.bury()
                     return
             try:
-                self.jobs[job_name](job)
+                job_obj(job)
             except KeyboardInterrupt:
                 raise
             except Exception, e:

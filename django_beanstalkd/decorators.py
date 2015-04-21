@@ -8,13 +8,14 @@ class _beanstalk_job(object):
     beanstalk job
     """
 
-    def __init__(self, f, worker, json=False, takes_job=False, require_db=False):
+    def __init__(self, f, worker, json=False, takes_job=False, require_db=False, ignore_reserve_timeout=False):
         self.f = f
         self.__name__ = f.__name__
         self.worker = worker
         self.json = json
         self.takes_job = takes_job
         self.require_db = require_db
+        self.ignore_reserve_timeout = ignore_reserve_timeout
         
         # determine app name
         parts = f.__module__.split('.')
