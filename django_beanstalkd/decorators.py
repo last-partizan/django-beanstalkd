@@ -10,7 +10,7 @@ class _beanstalk_job(object):
     beanstalk job
     """
 
-    def __init__(self, f, worker, json=False, takes_job=False, require_db=False, ignore_reserve_timeout=False):
+    def __init__(self, f, worker='default', json=False, takes_job=False, require_db=False, ignore_reserve_timeout=False):
         self.f = f
         self.__name__ = f.__name__
         self.worker = worker
@@ -46,7 +46,7 @@ class _beanstalk_job(object):
             args += (job.body,)
         return self.f(*args, **kwargs)
 
-def beanstalk_job(func=None, worker="default", json=False, takes_job=False, require_db=False):
+def beanstalk_job(func=None, *args, **kwargs):
     def decorator(func):
-        return _beanstalk_job(func, worker, json, takes_job, require_db)
+        return _beanstalk_job(func, *args, **kwargs)
     return decorator(func) if func else decorator
