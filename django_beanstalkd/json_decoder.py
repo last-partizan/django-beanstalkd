@@ -3,17 +3,12 @@ from functools import partial
 
 from django.db.models import DateTimeField
 
-class JSONDecoder(json.JSONDecoder):
-
-    def decode(self, *args, **kwargs):
-        obj = super(JSONDecoder, self).decode(*args, **kwargs)
-        print obj
-        return obj
+_parse_dt = DateTimeField().to_python
 
 def parse_datetime(obj):
     for k, v in obj.items():
         try:
-            obj[k] = DateTimeField().to_python(v)
+            obj[k] = _parse_dt(v)
         except:
             pass
     return obj
