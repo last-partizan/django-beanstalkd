@@ -138,6 +138,7 @@ class Command(NoArgsCommand):
                 self.children.append(child)
             else:
                 BeanstalkWorker(name, jobs).work()
+            logger.debug("Started worker '%s' for jobs %s", name, jobs)
         if job_list:
             for i in range(worker_count):
                 make_worker('default', job_list)
