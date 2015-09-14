@@ -139,7 +139,7 @@ class Command(NoArgsCommand):
             logger.info(
                 "Available jobs (worker '%s'):\n%s",
                 name,
-                "\n".join(["* %s" % k for k in jobs.keys]),
+                "\n".join(["* %s" % k for k in jobs.keys()]),
             )
         if job_list:
             for i in range(worker_count):
