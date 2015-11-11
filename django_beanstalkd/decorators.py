@@ -9,8 +9,16 @@ class _beanstalk_job(object):
     Decorator marking a function inside some_app/beanstalk_jobs.py as a
     beanstalk job
     """
+    _args = None
+    _kwargs = None
+    _on_bury = None
 
-    def __init__(self, f, worker='default', json=False, takes_job=False, require_db=False, ignore_reserve_timeout=False):
+    def __init__(self, f,
+                 worker='default', json=False,
+                 takes_job=False, require_db=False,
+                 ignore_reserve_timeout=False,
+                 on_bury=None,
+                 ):
         self.f = f
         self.__name__ = f.__name__
         self.worker = worker
@@ -18,6 +26,7 @@ class _beanstalk_job(object):
         self.takes_job = takes_job
         self.require_db = require_db
         self.ignore_reserve_timeout = ignore_reserve_timeout
+        self._on_bury = on_bury
         
         # determine app name
         parts = f.__module__.split('.')
@@ -34,17 +43,27 @@ class _beanstalk_job(object):
         except AttributeError:
             bs_module.beanstalk_job_list = [self]
 
-    def __call__(self, job):
-        args, kwargs = (), {}
+    def get_args(self, job=None):
+        if self._args is None:
+            self._args, self._kwargs = (), {}
+            if self.takes_job:
+                self._args += (job,)
+            if self.json:
+                self._kwargs = json_decoder.loads(job.body)
+            else:
+                self._args += (job.body,)
+        return self._args, self._kwargs
+
+    def call(self, job):
         if self.require_db:
             db.close_old_connections()
-        if self.takes_job:
-            args += (job,)
-        if self.json:
-            kwargs = json_decoder.loads(job.body)
-        else:
-            args += (job.body,)
+        args, kwargs = self.get_args(job)
         return self.f(*args, **kwargs)
+
+    def on_bury(self, exception):
+        if self._on_bury:
+            args, kwargs = self.get_args()
+            self._on_bury(exception, *args, **kwargs)
 
 def beanstalk_job(func=None, *args, **kwargs):
     def decorator(func):

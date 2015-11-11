@@ -12,9 +12,11 @@ from django_beanstalkd import connect_beanstalkd, BeanstalkError
 
 BEANSTALK_JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
 BEANSTALK_JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
+BEANSTALK_JOB_FAILED_RETRY_AFTER = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY_AFTER', 60)
 BEANSTALK_DISCONNECTED_RETRY_AFTER = getattr(
         settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
 BEANSTALK_RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
+
 
 logger = logging.getLogger('django_beanstalkd')
 _stream = logging.StreamHandler()
@@ -206,7 +208,7 @@ class BeanstalkWorker(object):
                     job.bury()
                     return
             try:
-                job_obj(job)
+                job_obj.call(job)
             except KeyboardInterrupt:
                 raise
             except Exception, e:
@@ -214,12 +216,17 @@ class BeanstalkWorker(object):
                 logger.exception(e)
                 releases = stats['releases']
                 if releases >= BEANSTALK_JOB_FAILED_RETRY:
-                    logger.info('j:%s, failed->bury' % job.jid)
+                    logger.info('j:%s, failed->bury', job.jid)
+                    try:
+                        job_obj.on_bury(e)
+                    except Exception, e:
+                        logger.info('j:%s, on_bury failed', job.jid)
+                        logger.exception(e)
                     job.bury()
                     return
                 else:
-                    delay = releases * 60
-                    logger.info('j:%s, failed->retry with delay %ds' % (job.jid, delay))
+                    delay = (releases or 0.1) * BEANSTALK_JOB_FAILED_RETRY_AFTER
+                    logger.info('j:%s, failed->retry with delay %ds', job.jid, delay)
                     job.release(delay=delay)
             else:
                 logger.debug("j:%s, done->delete" % job.jid)
