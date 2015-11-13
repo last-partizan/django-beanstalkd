@@ -218,7 +218,7 @@ class BeanstalkWorker(object):
                 if releases >= BEANSTALK_JOB_FAILED_RETRY:
                     logger.info('j:%s, failed->bury', job.jid)
                     try:
-                        job_obj.on_bury(e)
+                        job_obj.on_bury(job, e)
                     except Exception, e:
                         logger.info('j:%s, on_bury failed', job.jid)
                         logger.exception(e)

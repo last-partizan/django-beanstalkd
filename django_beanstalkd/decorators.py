@@ -9,8 +9,6 @@ class _beanstalk_job(object):
     Decorator marking a function inside some_app/beanstalk_jobs.py as a
     beanstalk job
     """
-    _args = None
-    _kwargs = None
     _on_bury = None
 
     def __init__(self, f,
@@ -59,9 +57,9 @@ class _beanstalk_job(object):
         args, kwargs = self.get_args(job)
         return self.f(*args, **kwargs)
 
-    def on_bury(self, exception):
+    def on_bury(self, job, exception):
         if self._on_bury:
-            args, kwargs = self.get_args()
+            args, kwargs = self.get_args(job)
             self._on_bury(exception, *args, **kwargs)
 
 def beanstalk_job(func=None, *args, **kwargs):
