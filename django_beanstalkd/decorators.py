@@ -44,15 +44,14 @@ class _beanstalk_job(object):
             bs_module.beanstalk_job_list = [self]
 
     def get_args(self, job=None):
-        if self._args is None:
-            self._args, self._kwargs = (), {}
-            if self.takes_job:
-                self._args += (job,)
-            if self.json:
-                self._kwargs = json_decoder.loads(job.body)
-            else:
-                self._args += (job.body,)
-        return self._args, self._kwargs
+        args, kwargs = (), {}
+        if self.takes_job:
+            args += (job,)
+        if self.json:
+            kwargs = json_decoder.loads(job.body)
+        else:
+            args += (job.body,)
+        return args, kwargs
 
     def call(self, job):
         if self.require_db:
