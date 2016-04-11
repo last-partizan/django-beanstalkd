@@ -1,5 +1,5 @@
 import logging
-from optparse import make_option
+from collections import OrderedDict
 from time import sleep
 import sys, os, signal
 import importlib
@@ -8,6 +8,8 @@ import beanstalkc
 
 from django.conf import settings
 from django.core.management.base import NoArgsCommand
+from django.apps import apps
+
 from django_beanstalkd import connect_beanstalkd, BeanstalkError
 
 BEANSTALK_JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
@@ -28,17 +30,25 @@ class Command(NoArgsCommand):
     __doc__ = help
     can_import_settings = True
     requires_model_validation = True
-    option_list = NoArgsCommand.option_list + (
-        make_option('-w', '--workers', action='store', dest='worker_count',
-                    default='1', help='Number of workers to spawn.'),
-        make_option('-l', '--log-level', action='store', dest='log_level',
-                    default='info', help='Log level of worker process (one of '
-                    '"debug", "info", "warning", "error")'),
-        make_option('-m', '--module', action='store', dest='module',
-                    default='', help='Module to load beanstalk_jobs from'),
-    )
     children = [] # list of worker processes
-    jobs = {}
+    jobs = OrderedDict()
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '-w', '--workers', dest='worker_count', type=int,
+            default=1, help='Number of workers to spawn.'
+        )
+        parser.add_argument(
+            '-l', '--log-level', dest='log_level', type=str,
+            default='info', help=(
+                'Log level of worker process (one of '
+                '"debug", "info", "warning", "error")'
+            )
+        )
+        parser.add_argument(
+            '-m', '--module', action='store', dest='module', type=str,
+            default='', help='Module to load beanstalk_jobs from'
+        )
 
     def handle_noargs(self, **options):
         # set log level
@@ -47,11 +57,12 @@ class Command(NoArgsCommand):
         # find beanstalk job modules
         bs_modules = []
         if not options['module']:
-            for app in settings.INSTALLED_APPS:
+            for app in apps.app_configs.values():
                 try:
-                    bs_modules.append(importlib.import_module("%s.beanstalk_jobs" % app))
-                except ImportError:
-                    pass
+                    bs_modules.append(importlib.import_module("%s.beanstalk_jobs" % app.name))
+                except ImportError as e:
+                    if e.message != 'No module named beanstalk_jobs':
+                        logger.error(e)
         else:
             bs_modules.append(importlib.import_module("%s.beanstalk_jobs" % options["module"]))
         if not bs_modules:
