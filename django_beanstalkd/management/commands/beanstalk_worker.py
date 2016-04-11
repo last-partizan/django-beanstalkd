@@ -169,23 +169,30 @@ class BeanstalkWorker(object):
 
     def work(self):
         """children only: watch tubes for all jobs, start working"""
+
         self.init_beanstalk()
+
+        logger.info(
+            "Available jobs (worker '%s'):\n%s",
+            self.name,
+            "\n".join(["  * %s" % k for k in self.jobs.keys()]),
+        )
 
         while True:
             try:
                 self._worker()
             except KeyboardInterrupt:
                 sys.exit(0)
-            except beanstalkc.SocketError, e:
+            except beanstalkc.SocketError as e:
                 logger.error("disconnected: %s" % e)
                 sleep(BEANSTALK_DISCONNECTED_RETRY_AFTER)
                 try:
                     self.init_beanstalk()
-                except BeanstalkError, e:
+                except BeanstalkError as e:
                     logger.error("reconnection failed: %s" % e)
                 else:
                     logger.debug("reconnected")
-            except Exception, e:
+            except Exception as e:
                 logger.exception(e)
 
     def init_beanstalk(self):
@@ -222,7 +229,7 @@ class BeanstalkWorker(object):
                 job_obj.call(job)
             except KeyboardInterrupt:
                 raise
-            except Exception, e:
+            except Exception as e:
                 logger.debug(u"%s:%s: job failed (%s)", job.jid, job_name, e)
                 logger.exception(e)
                 releases = stats['releases']
@@ -230,7 +237,7 @@ class BeanstalkWorker(object):
                     logger.info('j:%s, failed->bury', job.jid)
                     try:
                         job_obj.on_bury(job, e)
-                    except Exception, e:
+                    except Exception as e:
                         logger.info('j:%s, on_bury failed', job.jid)
                         logger.exception(e)
                     job.bury()
