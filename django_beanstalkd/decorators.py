@@ -25,7 +25,7 @@ class _beanstalk_job(object):
         self.require_db = require_db
         self.ignore_reserve_timeout = ignore_reserve_timeout
         self._on_bury = on_bury
-        
+
         # determine app name
         parts = f.__module__.split('.')
         if len(parts) > 1:
