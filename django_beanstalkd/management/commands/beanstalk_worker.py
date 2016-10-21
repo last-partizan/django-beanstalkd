@@ -12,13 +12,12 @@ from django.apps import apps
 
 from django_beanstalkd import connect_beanstalkd, BeanstalkError
 
-BEANSTALK_JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
-BEANSTALK_JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
-BEANSTALK_JOB_FAILED_RETRY_AFTER = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY_AFTER', 60)
-BEANSTALK_DISCONNECTED_RETRY_AFTER = getattr(
+JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
+JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
+JOB_FAILED_RETRY_AFTER = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY_AFTER', 60)
+DISCONNECTED_RETRY_AFTER = getattr(
         settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
-BEANSTALK_RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
-
+RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
 
 logger = logging.getLogger('django_beanstalkd')
 _stream = logging.StreamHandler()
@@ -87,7 +86,7 @@ class Command(NoArgsCommand):
             # determine right name to register function with
             app = job.app
             jobname = job.__name__
-            func = BEANSTALK_JOB_NAME % {
+            func = JOB_NAME % {
                     'app': app, 'job': jobname}
             try:
                 workers[job.worker][func] = job
@@ -185,7 +184,7 @@ class BeanstalkWorker(object):
                 sys.exit(0)
             except beanstalkc.SocketError as e:
                 logger.error("disconnected: %s" % e)
-                sleep(BEANSTALK_DISCONNECTED_RETRY_AFTER)
+                sleep(DISCONNECTED_RETRY_AFTER)
                 try:
                     self.init_beanstalk()
                 except BeanstalkError as e:
@@ -208,11 +207,11 @@ class BeanstalkWorker(object):
         if job_name in self.jobs:
             job_obj = self.jobs[job_name]
             logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
-            if BEANSTALK_RESERVE_TIMEOUT and not job_obj.ignore_reserve_timeout:
+            if RESERVE_TIMEOUT and not job_obj.ignore_reserve_timeout:
                 age = stats['age'] - stats['delay']
-                if age >= BEANSTALK_RESERVE_TIMEOUT:
+                if age >= RESERVE_TIMEOUT:
                     logger.warning(
-                        "job.buried: Job age > BEANSTALK_RESERVE_TIMEOUT.",
+                        "job.buried: Job age > RESERVE_TIMEOUT.",
                         extra={
                             'data': {
                                 'job': {
@@ -233,7 +232,7 @@ class BeanstalkWorker(object):
                 logger.debug(u"%s:%s: job failed (%s)", job.jid, job_name, e)
                 logger.exception(e)
                 releases = stats['releases']
-                if releases >= BEANSTALK_JOB_FAILED_RETRY:
+                if releases >= JOB_FAILED_RETRY:
                     logger.info('j:%s, failed->bury', job.jid)
                     try:
                         job_obj.on_bury(job, e)
@@ -243,7 +242,7 @@ class BeanstalkWorker(object):
                     job.bury()
                     return
                 else:
-                    delay = (releases or 0.1) * BEANSTALK_JOB_FAILED_RETRY_AFTER
+                    delay = (releases or 0.1) * JOB_FAILED_RETRY_AFTER
                     logger.info('j:%s, failed->retry with delay %ds', job.jid, delay)
                     job.release(delay=delay)
             else:
