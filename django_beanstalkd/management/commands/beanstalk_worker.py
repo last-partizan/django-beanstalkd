@@ -163,14 +163,16 @@ class Command(NoArgsCommand):
                 make_worker(key, job_list)
         logger.info("Spawned %d workers" % len(self.children))
 
+
 class ReserveTimeout(Exception):
     pass
+
 
 class BeanstalkWorker(object):
     def __init__(self, name, jobs):
         self.name = name
         self.jobs = jobs
-        self._heartbeat_key = "_heartbeat.%s" % get_random_string()
+        self._heartbeat_key = "_heartbeat.%s.%s" % (self.name, get_random_string())
 
     def work(self):
         """children only: watch tubes for all jobs, start working"""
@@ -217,7 +219,7 @@ class BeanstalkWorker(object):
         stats = job.stats()
         job_name = stats['tube']
         if job_name == self._heartbeat_key:
-            logger.debug("j:%s:%s, heartbeat ok->delete", job_name, job.jid)
+            logger.debug("j:%s:%s ok->delete", job_name, job.jid)
             job.delete()
         else:
             self.process_job(job, job_name, stats)
