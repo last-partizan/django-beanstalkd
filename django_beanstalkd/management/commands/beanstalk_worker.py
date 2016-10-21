@@ -8,9 +8,10 @@ import beanstalkc
 
 from django.conf import settings
 from django.core.management.base import NoArgsCommand
+from django.utils.crypto import get_random_string
 from django.apps import apps
 
-from django_beanstalkd import connect_beanstalkd, BeanstalkError
+from django_beanstalkd import BeanstalkClient, BeanstalkError
 
 JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
 JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
@@ -18,6 +19,7 @@ JOB_FAILED_RETRY_AFTER = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY_AFTER', 6
 DISCONNECTED_RETRY_AFTER = getattr(
         settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
 RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
+HEARTBEAT = getattr(settings, "BEANSTALK_HEARTBEAT", 300)
 
 logger = logging.getLogger('django_beanstalkd')
 _stream = logging.StreamHandler()
@@ -165,6 +167,7 @@ class BeanstalkWorker(object):
     def __init__(self, name, jobs):
         self.name = name
         self.jobs = jobs
+        self._heartbeat_key = "_heartbeat.%s" % get_random_string()
 
     def work(self):
         """children only: watch tubes for all jobs, start working"""
@@ -195,59 +198,70 @@ class BeanstalkWorker(object):
                 logger.exception(e)
 
     def init_beanstalk(self):
-        self._beanstalk = connect_beanstalkd()
+        self._client = BeanstalkClient()
+        self._watch = self._client._beanstalk.watch
+        self._watch(self._heartbeat_key)
         for job in self.jobs.keys():
-            self._beanstalk.watch(job)
-        self._beanstalk.ignore('default')
+            self._watch(job)
+        self._client._beanstalk.ignore('default')
+        self.beat()
 
     def _worker(self):
-        job = self._beanstalk.reserve()
+        job = self._client._beanstalk.reserve(HEARTBEAT)
+        if not job:
+            raise RuntimeError("Timeout")
         stats = job.stats()
         job_name = stats['tube']
-        if job_name in self.jobs:
-            job_obj = self.jobs[job_name]
-            logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
-            if RESERVE_TIMEOUT and not job_obj.ignore_reserve_timeout:
-                age = stats['age'] - stats['delay']
-                if age >= RESERVE_TIMEOUT:
-                    logger.warning(
-                        "job.buried: Job age > RESERVE_TIMEOUT.",
-                        extra={
-                            'data': {
-                                'job': {
-                                    "tube": job_name,
-                                    "id": job.jid,
-                                    "body": job.body,
-                                    "age": age,
-                                },
-                            },
-                        })
-                    job.bury()
-                    return
-            try:
-                job_obj.call(job)
-            except KeyboardInterrupt:
-                raise
-            except Exception as e:
-                logger.debug(u"%s:%s: job failed (%s)", job.jid, job_name, e)
-                logger.exception(e)
-                releases = stats['releases']
-                if releases >= JOB_FAILED_RETRY:
-                    logger.info('j:%s, failed->bury', job.jid)
-                    try:
-                        job_obj.on_bury(job, e)
-                    except Exception as e:
-                        logger.info('j:%s, on_bury failed', job.jid)
-                        logger.exception(e)
-                    job.bury()
-                    return
-                else:
-                    delay = (releases or 0.1) * JOB_FAILED_RETRY_AFTER
-                    logger.info('j:%s, failed->retry with delay %ds', job.jid, delay)
-                    job.release(delay=delay)
-            else:
-                logger.debug("j:%s, done->delete" % job.jid)
-                job.delete()
-                return
+        if job_name == self._heartbeat_key:
+            logger.debug("j:%s, heartbeat ok. done->delete" % job.jid)
+            job.delete()
         else:
-            job.release()
+            self.process_job(job, job_name, stats)
+        self.beat()
+
+    def beat(self):
+        self._client.call(self._heartbeat_key, delay=HEARTBEAT*2)
+
+    def process_job(self, job, job_name, stats):
+        job_obj = self.jobs[job_name]
+        logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
+        if RESERVE_TIMEOUT and not job_obj.ignore_reserve_timeout:
+            age = stats['age'] - stats['delay']
+            if age >= RESERVE_TIMEOUT:
+                logger.warning(
+                    "job.buried: Job age > RESERVE_TIMEOUT.",
+                    extra={
+                        'data': {
+                            'job': {
+                                "tube": job_name,
+                                "id": job.jid,
+                                "body": job.body,
+                                "age": age,
+                            },
+                        },
+                    })
+                job.bury()
+                return
+        try:
+            job_obj.call(job)
+            logger.debug("j:%s, done->delete" % job.jid)
+            job.delete()
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            logger.debug(u"%s:%s: job failed (%s)", job.jid, job_name, e)
+            logger.exception(e)
+            releases = stats['releases']
+            if releases >= JOB_FAILED_RETRY:
+                logger.info('j:%s, failed->bury', job.jid)
+                try:
+                    job_obj.on_bury(job, e)
+                except Exception as e:
+                    logger.info('j:%s, on_bury failed', job.jid)
+                    logger.exception(e)
+                job.bury()
+                return
+            else:
+                delay = (releases or 0.1) * JOB_FAILED_RETRY_AFTER
+                logger.info('j:%s, failed->retry with delay %ds', job.jid, delay)
+                job.release(delay=delay)
