@@ -1,6 +1,6 @@
 import logging
 from collections import OrderedDict
-from time import sleep
+from time import sleep, time
 import sys, os, signal
 import importlib
 
@@ -210,6 +210,7 @@ class BeanstalkWorker(object):
         for job in self.jobs.keys():
             self._watch(job)
         self._client._beanstalk.ignore('default')
+        self._beat_ts = None
         self.beat()
 
     def _worker(self):
@@ -226,7 +227,12 @@ class BeanstalkWorker(object):
         self.beat()
 
     def beat(self):
-        self._client.call(self._heartbeat_key, delay=HEARTBEAT/2)
+        now = time()
+        if not self._beat_ts or now - self._beat_ts > HEARTBEAT/2:
+            self._beat_ts = now
+            self._client.call(self._heartbeat_key, delay=HEARTBEAT/2)
+        else:
+            logger.debug("Skip beat")
 
     def process_job(self, job, job_name, stats):
         job_obj = self.jobs[job_name]
