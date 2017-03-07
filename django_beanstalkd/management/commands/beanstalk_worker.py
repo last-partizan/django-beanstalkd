@@ -7,7 +7,7 @@ import importlib
 import beanstalkc
 
 from django.conf import settings
-from django.core.management.base import NoArgsCommand
+from django.core.management.base import BaseCommand
 from django.utils.crypto import get_random_string
 from django.apps import apps
 
@@ -26,7 +26,8 @@ _stream = logging.StreamHandler()
 _stream.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(message)s'))
 logger.addHandler(_stream)
 
-class Command(NoArgsCommand):
+
+class Command(BaseCommand):
     help = "Start a Beanstalk worker serving all registered Beanstalk jobs"
     __doc__ = help
     can_import_settings = True
@@ -51,7 +52,7 @@ class Command(NoArgsCommand):
             default='', help='Module to load beanstalk_jobs from'
         )
 
-    def handle_noargs(self, **options):
+    def handle(self, *args, **options):
         # set log level
         logger.setLevel(getattr(logging, options['log_level'].upper()))
 
