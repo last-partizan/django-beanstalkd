@@ -1,7 +1,9 @@
 import logging
 from collections import OrderedDict
 from time import sleep, time
-import sys, os, signal
+import sys
+import os
+import signal
 import importlib
 
 import beanstalkc
@@ -15,9 +17,10 @@ from django_beanstalkd import BeanstalkClient, BeanstalkError
 
 JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
 JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
-JOB_FAILED_RETRY_AFTER = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY_AFTER', 60)
+JOB_FAILED_RETRY_AFTER = getattr(settings,
+                                 'BEANSTALK_JOB_FAILED_RETRY_AFTER', 60)
 DISCONNECTED_RETRY_AFTER = getattr(
-        settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
+    settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
 RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
 HEARTBEAT = getattr(settings, "BEANSTALK_HEARTBEAT", 300)
 
@@ -32,7 +35,7 @@ class Command(BaseCommand):
     __doc__ = help
     can_import_settings = True
     requires_model_validation = True
-    children = [] # list of worker processes
+    children = []  # list of worker processes
     jobs = OrderedDict()
 
     def add_arguments(self, parser):
@@ -52,7 +55,7 @@ class Command(BaseCommand):
             default='', help='Module to load beanstalk_jobs from'
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args, **options):  # noqa: C901
         # set log level
         logger.setLevel(getattr(logging, options['log_level'].upper()))
 
@@ -90,7 +93,8 @@ class Command(BaseCommand):
             app = job.app
             jobname = job.__name__
             func = JOB_NAME % {
-                    'app': app, 'job': jobname}
+                'app': app, 'job': jobname,
+            }
             try:
                 workers[job.worker][func] = job
             except KeyError:
@@ -229,9 +233,9 @@ class BeanstalkWorker(object):
 
     def beat(self):
         now = time()
-        if not self._beat_ts or now - self._beat_ts > HEARTBEAT/2:
+        if not self._beat_ts or now - self._beat_ts > HEARTBEAT / 2:
             self._beat_ts = now
-            self._client.call(self._heartbeat_key, delay=HEARTBEAT/2)
+            self._client.call(self._heartbeat_key, delay=HEARTBEAT / 2)
         else:
             logger.debug("Skip beat")
 
