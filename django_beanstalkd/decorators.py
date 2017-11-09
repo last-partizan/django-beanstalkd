@@ -4,6 +4,7 @@ from django import db
 
 import json_decoder
 
+
 class _beanstalk_job(object):
     """
     Decorator marking a function inside some_app/beanstalk_jobs.py as a
@@ -16,6 +17,7 @@ class _beanstalk_job(object):
                  takes_job=False, require_db=False,
                  ignore_reserve_timeout=False,
                  on_bury=None,
+                 ignore_exceptions=tuple(),
                  ):
         self.f = f
         self.__name__ = f.__name__
@@ -24,6 +26,7 @@ class _beanstalk_job(object):
         self.takes_job = takes_job
         self.require_db = require_db
         self.ignore_reserve_timeout = ignore_reserve_timeout
+        self.ignore_exceptions = ignore_exceptions
         self._on_bury = on_bury
 
         # determine app name
@@ -61,6 +64,7 @@ class _beanstalk_job(object):
         if self._on_bury:
             args, kwargs = self.get_args(job)
             self._on_bury(exception, *args, **kwargs)
+
 
 def beanstalk_job(func=None, *args, **kwargs):
     def decorator(func):

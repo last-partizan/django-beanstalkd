@@ -267,7 +267,8 @@ class BeanstalkWorker(object):
             raise
         except Exception as e:
             logger.debug(u"%s:%s: job failed (%s)", job.jid, job_name, e)
-            logger.exception(e)
+            if not isinstance(e, job_obj.ignore_exceptions):
+                logger.exception(e)
             releases = stats['releases']
             if releases >= JOB_FAILED_RETRY:
                 logger.info('j:%s, failed->bury', job.jid)

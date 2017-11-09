@@ -5,6 +5,7 @@ from django.db.models import DateTimeField
 
 _parse_dt = DateTimeField().to_python
 
+
 def parse_datetime(obj):
     for k, v in obj.items():
         try:
@@ -12,5 +13,6 @@ def parse_datetime(obj):
         except:
             pass
     return obj
+
 
 loads = partial(json.loads, object_hook=parse_datetime)
