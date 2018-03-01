@@ -1,6 +1,6 @@
 import logging
 from collections import OrderedDict
-from time import sleep, time
+from time import sleep
 import sys
 import os
 import signal
@@ -10,7 +10,6 @@ import beanstalkc
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.utils.crypto import get_random_string
 from django.apps import apps
 
 from django_beanstalkd import BeanstalkClient, BeanstalkError
@@ -22,7 +21,7 @@ JOB_FAILED_RETRY_AFTER = getattr(settings,
 DISCONNECTED_RETRY_AFTER = getattr(
     settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
 RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
-HEARTBEAT = getattr(settings, "BEANSTALK_HEARTBEAT", 300)
+SOCKET_TIMEOUT = getattr(settings, "BEANSTALK_SOCKET_TIMEOUT", 300)
 
 logger = logging.getLogger('django_beanstalkd')
 _stream = logging.StreamHandler()
@@ -169,15 +168,10 @@ class Command(BaseCommand):
         logger.info("Spawned %d workers" % len(self.children))
 
 
-class ReserveTimeout(Exception):
-    pass
-
-
 class BeanstalkWorker(object):
     def __init__(self, name, jobs):
         self.name = name
         self.jobs = jobs
-        self._heartbeat_key = "_heartbeat.%s.%s" % (self.name, get_random_string())
 
     def work(self):
         """children only: watch tubes for all jobs, start working"""
@@ -195,7 +189,7 @@ class BeanstalkWorker(object):
                 self._worker()
             except KeyboardInterrupt:
                 sys.exit(0)
-            except (ReserveTimeout, beanstalkc.SocketError) as e:
+            except beanstalkc.SocketError as e:
                 logger.error("disconnected: %s" % e)
                 sleep(DISCONNECTED_RETRY_AFTER)
                 try:
@@ -209,35 +203,17 @@ class BeanstalkWorker(object):
 
     def init_beanstalk(self):
         self._client = BeanstalkClient()
-        self._client._beanstalk._socket.settimeout(HEARTBEAT)
+        self._client._beanstalk._socket.settimeout(SOCKET_TIMEOUT)
         self._watch = self._client._beanstalk.watch
-        self._watch(self._heartbeat_key)
         for job in self.jobs.keys():
             self._watch(job)
         self._client._beanstalk.ignore('default')
-        self._beat_ts = None
-        self.beat()
 
     def _worker(self):
-        job = self._client._beanstalk.reserve(HEARTBEAT)
-        if not job:
-            raise ReserveTimeout("Heartbeat timed out.")
+        job = self._client._beanstalk.reserve()
         stats = job.stats()
         job_name = stats['tube']
-        if job_name == self._heartbeat_key:
-            logger.debug("j:%s:%s ok->delete", job_name, job.jid)
-            job.delete()
-        else:
-            self.process_job(job, job_name, stats)
-        self.beat()
-
-    def beat(self):
-        now = time()
-        if not self._beat_ts or now - self._beat_ts > HEARTBEAT / 2:
-            self._beat_ts = now
-            self._client.call(self._heartbeat_key, delay=HEARTBEAT / 2)
-        else:
-            logger.debug("Skip beat")
+        self.process_job(job, job_name, stats)
 
     def process_job(self, job, job_name, stats):
         job_obj = self.jobs[job_name]
