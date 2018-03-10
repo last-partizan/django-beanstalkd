@@ -203,7 +203,6 @@ class BeanstalkWorker(object):
 
     def init_beanstalk(self):
         self._client = BeanstalkClient()
-        self._client._beanstalk._socket.settimeout(SOCKET_TIMEOUT)
         self._watch = self._client._beanstalk.watch
         for job in self.jobs.keys():
             self._watch(job)
