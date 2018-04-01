@@ -65,7 +65,7 @@ class Command(BaseCommand):
                 try:
                     bs_modules.append(importlib.import_module("%s.beanstalk_jobs" % app.name))
                 except ImportError as e:
-                    if e.message != 'No module named beanstalk_jobs':
+                    if "No module named" not in str(e):
                         logger.error(e)
         else:
             bs_modules.append(importlib.import_module("%s.beanstalk_jobs" % options["module"]))
@@ -157,7 +157,7 @@ class Command(BaseCommand):
             logger.info(
                 "Available jobs (worker '%s'):\n%s",
                 name,
-                "\n".join(["  * %s" % k for k in jobs.keys()]),
+                "\n".join("  * %s" % k for k in jobs.keys()),
             )
         if job_list:
             for i in range(worker_count):
@@ -181,7 +181,7 @@ class BeanstalkWorker(object):
         logger.info(
             "Available jobs (worker '%s'):\n%s",
             self.name,
-            "\n".join(["  * %s" % k for k in self.jobs.keys()]),
+            "\n".join("  * %s" % k for k in self.jobs.keys()),
         )
 
         while True:
@@ -204,7 +204,7 @@ class BeanstalkWorker(object):
     def init_beanstalk(self):
         self._client = BeanstalkClient()
         self._watch = self._client._beanstalk.watch
-        for job in self.jobs.keys():
+        for job in list(self.jobs.keys()):
             self._watch(job)
         self._client._beanstalk.ignore('default')
 

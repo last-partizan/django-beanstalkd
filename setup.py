@@ -1,9 +1,13 @@
 from setuptools import setup, find_packages
+import sys
 
+requires = [
+    "beanstalkc" if sys.version_info.major == 2 else "beanstalkc3"
+]
 
 setup(
     name='django-beanstalkd',
-    version='0.2.3',
+    version='0.3',
     description='A convenience wrapper for beanstalkd clients and workers '
                 'in Django using the beanstalkc library for Python',
     long_description=open('README.md').read(),
@@ -14,7 +18,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    install_requires=['pyyaml', 'beanstalkc'],
+    install_requires=requires,
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Environment :: Web Environment',

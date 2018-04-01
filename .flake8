@@ -8,6 +8,7 @@ ignore =
     E241,
     E272,
     E731,
+    E722,
     N806
 exclude =
     .git,
