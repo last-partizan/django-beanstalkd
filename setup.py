@@ -2,7 +2,6 @@ from setuptools import setup, find_packages
 import sys
 
 requires = [
-    "futurize",
     "beanstalkc" if sys.version_info.major == 2 else "beanstalkc3"
 ]
 
