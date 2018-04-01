@@ -65,7 +65,7 @@ class Command(BaseCommand):
                 try:
                     bs_modules.append(importlib.import_module("%s.beanstalk_jobs" % app.name))
                 except ImportError as e:
-                    if e.message != 'No module named beanstalk_jobs':
+                    if "No module named" not in str(e):
                         logger.error(e)
         else:
             bs_modules.append(importlib.import_module("%s.beanstalk_jobs" % options["module"]))
