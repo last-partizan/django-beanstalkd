@@ -165,7 +165,7 @@ class Command(BaseCommand):
         for key, job_list in workers.items():
             for i in range(self.get_workers_count(key)):
                 make_worker(key, job_list)
-        logger.info("Spawned %d workers" % len(self.children))
+        logger.info("Spawned %d workers", len(self.children))
 
 
 class BeanstalkWorker(object):
@@ -190,12 +190,12 @@ class BeanstalkWorker(object):
             except KeyboardInterrupt:
                 sys.exit(0)
             except beanstalkc.SocketError as e:
-                logger.error("disconnected: %s" % e)
+                logger.error("disconnected: %s", e, exc_info=True)
                 sleep(DISCONNECTED_RETRY_AFTER)
                 try:
                     self.init_beanstalk()
                 except BeanstalkError as e:
-                    logger.error("reconnection failed: %s" % e)
+                    logger.error("reconnection failed: %s", e)
                 else:
                     logger.debug("reconnected")
             except Exception as e:
@@ -203,7 +203,6 @@ class BeanstalkWorker(object):
 
     def init_beanstalk(self):
         self._client = BeanstalkClient()
-        self._client._beanstalk._socket.settimeout(SOCKET_TIMEOUT)
         self._watch = self._client._beanstalk.watch
         for job in self.jobs.keys():
             self._watch(job)
@@ -217,7 +216,7 @@ class BeanstalkWorker(object):
 
     def process_job(self, job, job_name, stats):
         job_obj = self.jobs[job_name]
-        logger.debug("j:%s, %s(%s)" % (job.jid, job_name, job.body))
+        logger.debug("j:%s, %s(%s)", job.jid, job_name, job.body)
         if RESERVE_TIMEOUT and not job_obj.ignore_reserve_timeout:
             age = stats['age'] - stats['delay']
             if age >= RESERVE_TIMEOUT:
@@ -237,7 +236,7 @@ class BeanstalkWorker(object):
                 return
         try:
             job_obj.call(job)
-            logger.debug("j:%s, done->delete" % job.jid)
+            logger.debug("j:%s, done->delete", job.jid)
             job.delete()
         except KeyboardInterrupt:
             raise
