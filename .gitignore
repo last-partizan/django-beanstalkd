@@ -6,4 +6,5 @@
 *~
 *.py[oc]
 *egg-info/
+.eggs/
 .ropeproject
