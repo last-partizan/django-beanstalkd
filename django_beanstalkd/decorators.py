@@ -1,8 +1,10 @@
+from __future__ import absolute_import
+from builtins import object
 import importlib
 
 from django import db
 
-import json_decoder
+from . import json_decoder
 
 
 class _beanstalk_job(object):

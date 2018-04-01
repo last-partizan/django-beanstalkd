@@ -157,7 +157,7 @@ class Command(BaseCommand):
             logger.info(
                 "Available jobs (worker '%s'):\n%s",
                 name,
-                "\n".join(["  * %s" % k for k in jobs.keys()]),
+                "\n".join("  * %s" % k for k in jobs.keys()),
             )
         if job_list:
             for i in range(worker_count):
@@ -181,7 +181,7 @@ class BeanstalkWorker(object):
         logger.info(
             "Available jobs (worker '%s'):\n%s",
             self.name,
-            "\n".join(["  * %s" % k for k in self.jobs.keys()]),
+            "\n".join("  * %s" % k for k in self.jobs.keys()),
         )
 
         while True:
@@ -205,7 +205,7 @@ class BeanstalkWorker(object):
         self._client = BeanstalkClient()
         self._client._beanstalk._socket.settimeout(SOCKET_TIMEOUT)
         self._watch = self._client._beanstalk.watch
-        for job in self.jobs.keys():
+        for job in list(self.jobs.keys()):
             self._watch(job)
         self._client._beanstalk.ignore('default')
 

@@ -2,6 +2,8 @@
 Example Beanstalk Job File.
 Needs to be called beanstalk_jobs.py and reside inside a registered Django app.
 """
+from __future__ import print_function
+from builtins import range
 import os
 import time
 
@@ -18,9 +20,9 @@ def background_counting(arg):
     """
     value = int(arg)
     pid = os.getpid()
-    print "[%s] Counting from 1 to %d." % (pid, value)
+    print("[%s] Counting from 1 to %d." % (pid, value))
     for i in range(1, value+1):
-        print '[%s] %d' % (pid, i)
+        print('[%s] %d' % (pid, i))
         time.sleep(1)
 
 @beanstalk_job(worker='worker_example')
