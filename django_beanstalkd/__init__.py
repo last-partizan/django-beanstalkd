@@ -24,7 +24,7 @@ def connect_beanstalkd():
         port = int(port)
         return Connection(server, port, connect_timeout=timeout)
     except (ValueError, SocketError) as e:
-        raise BeanstalkError(e)
+        raise BeanstalkError(server, e)
 
 
 class BeanstalkError(Exception):
