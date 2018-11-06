@@ -244,14 +244,11 @@ class BeanstalkWorker(object):
             releases = stats['releases']
             if releases >= job_obj.job_failed_retry:
                 logger.info('j:%s, failed->bury', job.jid)
-                try:
-                    job_obj.on_bury(job, e)
-                except Exception as e:
-                    logger.info('j:%s, on_bury failed', job.jid)
-                    logger.exception(e)
+                job_obj.on_bury(job, e)
                 job.bury()
                 return
             else:
                 delay = (releases or 0.1) * job_obj.job_failed_retry_after
                 logger.info('j:%s, failed->retry with delay %ds', job.jid, delay)
+                job_obj.on_retry(job, e)
                 job.release(delay=delay)
