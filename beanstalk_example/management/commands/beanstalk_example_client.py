@@ -1,5 +1,4 @@
 from __future__ import print_function
-from builtins import range
 from django.core.management.base import NoArgsCommand
 from django_beanstalkd import BeanstalkClient
 
