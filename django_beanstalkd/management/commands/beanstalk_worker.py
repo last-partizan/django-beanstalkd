@@ -15,9 +15,6 @@ from django.apps import apps
 from django_beanstalkd import BeanstalkClient, BeanstalkError
 
 JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
-JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
-JOB_FAILED_RETRY_AFTER = getattr(settings,
-                                 'BEANSTALK_JOB_FAILED_RETRY_AFTER', 60)
 DISCONNECTED_RETRY_AFTER = getattr(
     settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
 RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
@@ -245,7 +242,7 @@ class BeanstalkWorker(object):
             if not isinstance(e, job_obj.ignore_exceptions):
                 logger.exception(e)
             releases = stats['releases']
-            if releases >= JOB_FAILED_RETRY:
+            if releases >= job_obj.job_failed_retry:
                 logger.info('j:%s, failed->bury', job.jid)
                 try:
                     job_obj.on_bury(job, e)
@@ -255,6 +252,6 @@ class BeanstalkWorker(object):
                 job.bury()
                 return
             else:
-                delay = (releases or 0.1) * JOB_FAILED_RETRY_AFTER
+                delay = (releases or 0.1) * job_obj.job_failed_retry_after
                 logger.info('j:%s, failed->retry with delay %ds', job.jid, delay)
                 job.release(delay=delay)
