@@ -1,8 +1,8 @@
 import logging
 from collections import OrderedDict
+from multiprocessing import Process
 from time import sleep
 import sys
-import os
 import signal
 import importlib
 
@@ -110,7 +110,9 @@ class Command(BaseCommand):
         logger.info("Starting to work... (press ^C to exit)")
         try:
             for child in self.children:
-                os.waitpid(child, 0)
+                child.start()
+            for child in self.children:
+                child.join()
         except KeyboardInterrupt:
             sys.exit(0)
 
@@ -121,7 +123,10 @@ class Command(BaseCommand):
         """Stop child processes after receiving SIGTERM"""
         def handler(sig, func=None):
             for child in self.children:
-                os.kill(child, signal.SIGINT)
+                try:
+                    child.terminate()
+                except AttributeError:
+                    pass
             sys.exit(0)
         signal.signal(signal.SIGTERM, handler)
 
@@ -137,42 +142,37 @@ class Command(BaseCommand):
         if worker_count == 1 and not workers:
             return BeanstalkWorker('default', job_list).work()
 
-        # spawn children and make them work (hello, 19th century!)
-        def make_worker(name, jobs):
-            child = os.fork()
-            try:
-                # reinit crypto modules after fork
-                # http://stackoverflow.com/questions/16981503/pycrypto-assertionerrorpid-check-failed-rng-must-be-re-initialized-after-fo
-                import Crypto
-                Crypto.Random.atfork()
-            except:
-                pass
-            if child:
-                self.children.append(child)
-            else:
-                BeanstalkWorker(name, jobs).work()
-            logger.info(
-                "Available jobs (worker '%s'):\n%s",
-                name,
-                "\n".join("  * %s" % k for k in jobs.keys()),
-            )
         if job_list:
             for i in range(worker_count):
-                make_worker('default', job_list)
+                self.children.append(Process(target=self.make_worker, args=('default', job_list)))
         for key, job_list in workers.items():
             for i in range(self.get_workers_count(key)):
-                make_worker(key, job_list)
+                self.children.append(Process(target=self.make_worker, args=(key, job_list)))
         logger.info("Spawned %d workers", len(self.children))
+
+    def make_worker(self, name, jobs):
+        BeanstalkWorker(name, jobs).work()
 
 
 class BeanstalkWorker(object):
+
     def __init__(self, name, jobs):
         self.name = name
         self.jobs = jobs
 
+    def _crypto_atfork(self):
+        try:
+            # reinit crypto modules after fork
+            # http://stackoverflow.com/questions/16981503/pycrypto-assertionerrorpid-check-failed-rng-must-be-re-initialized-after-fo
+            import Crypto
+            Crypto.Random.atfork()
+        except:
+            pass
+
     def work(self):
         """children only: watch tubes for all jobs, start working"""
 
+        self._crypto_atfork()
         self.init_beanstalk()
 
         logger.info(
