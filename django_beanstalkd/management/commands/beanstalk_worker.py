@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from multiprocessing import Process
 from time import sleep
 import sys
@@ -28,7 +27,6 @@ class Command(BaseCommand):
     can_import_settings = True
     requires_model_validation = True
     children = []  # list of worker processes
-    jobs = OrderedDict()
 
     def add_arguments(self, parser):
         parser.add_argument(
