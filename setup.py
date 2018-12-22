@@ -7,7 +7,7 @@ requires = [
 
 setup(
     name='django-beanstalkd',
-    version='0.3.2',
+    version='0.3.3',
     description='A convenience wrapper for beanstalkd clients and workers '
                 'in Django using the beanstalkc library for Python',
     long_description=open('README.md').read(),
