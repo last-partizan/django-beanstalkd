@@ -2,6 +2,7 @@ import logging
 from collections import OrderedDict
 from multiprocessing import Process
 from time import sleep
+import os
 import sys
 import signal
 import importlib
@@ -21,9 +22,11 @@ RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
 SOCKET_TIMEOUT = getattr(settings, "BEANSTALK_SOCKET_TIMEOUT", 300)
 
 logger = logging.getLogger('django_beanstalkd')
-_stream = logging.StreamHandler()
-_stream.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(message)s'))
-logger.addHandler(_stream)
+if not logger.handlers:
+    _stream = logging.StreamHandler()
+    if "JOURNAL_STREAM" not in os.environ:
+        _stream.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(message)s'))
+    logger.addHandler(_stream)
 
 
 class Command(BaseCommand):
