@@ -1,11 +1,10 @@
-import logging
 from collections import OrderedDict
 from multiprocessing import Process
 from time import sleep
-import os
 import sys
 import signal
 import importlib
+import logging
 
 import beanstalkc
 
@@ -13,20 +12,14 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.apps import apps
 
-from django_beanstalkd import BeanstalkClient, BeanstalkError
+from django_beanstalkd import BeanstalkClient, BeanstalkError, get_logger
 
 JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
 DISCONNECTED_RETRY_AFTER = getattr(
     settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
 RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
 SOCKET_TIMEOUT = getattr(settings, "BEANSTALK_SOCKET_TIMEOUT", 300)
-
-logger = logging.getLogger('django_beanstalkd')
-if not logger.handlers:
-    _stream = logging.StreamHandler()
-    if "JOURNAL_STREAM" not in os.environ:
-        _stream.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(message)s'))
-    logger.addHandler(_stream)
+logger = get_logger(__name__)
 
 
 class Command(BaseCommand):
