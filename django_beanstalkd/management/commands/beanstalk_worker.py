@@ -230,7 +230,10 @@ class BeanstalkWorker(object):
         try:
             job_obj.call(job)
             logger.debug("j:%s, done->delete", job.jid)
-            job.delete()
+            try:
+                job.delete()
+            except beanstalkc.CommandFailed:
+                logger.warning("j:%s, job.delete failed", job.jid)
         except KeyboardInterrupt:
             raise
         except Exception as e:
