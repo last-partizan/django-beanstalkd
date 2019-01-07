@@ -1,9 +1,5 @@
 from setuptools import setup, find_packages
-import sys
 
-requires = [
-    "beanstalkc" if sys.version_info.major == 2 else "beanstalkc3"
-]
 
 setup(
     name='django-beanstalkd',
@@ -18,7 +14,11 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    install_requires=requires,
+    install_requires=[
+        "beanstalkc; python_version < '3'",
+        "beanstalkc3; python_version >= '3'",
+    ],
+    tests_require=['django'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Environment :: Web Environment',
