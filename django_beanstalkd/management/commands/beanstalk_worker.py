@@ -1,10 +1,9 @@
-import logging
-from collections import OrderedDict
+from multiprocessing import Process
 from time import sleep
 import sys
-import os
 import signal
 import importlib
+import logging
 
 import beanstalkc
 
@@ -12,21 +11,14 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.apps import apps
 
-from django_beanstalkd import BeanstalkClient, BeanstalkError
+from django_beanstalkd import BeanstalkClient, BeanstalkError, get_logger
 
 JOB_NAME = getattr(settings, 'BEANSTALK_JOB_NAME', '%(app)s.%(job)s')
-JOB_FAILED_RETRY = getattr(settings, 'BEANSTALK_JOB_FAILED_RETRY', 3)
-JOB_FAILED_RETRY_AFTER = getattr(settings,
-                                 'BEANSTALK_JOB_FAILED_RETRY_AFTER', 60)
 DISCONNECTED_RETRY_AFTER = getattr(
     settings, 'BEANSTALK_DISCONNECTED_RETRY_AFTER', 30)
 RESERVE_TIMEOUT = getattr(settings, "BEANSTALK_RESERVE_TIMEOUT", None)
 SOCKET_TIMEOUT = getattr(settings, "BEANSTALK_SOCKET_TIMEOUT", 300)
-
-logger = logging.getLogger('django_beanstalkd')
-_stream = logging.StreamHandler()
-_stream.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(message)s'))
-logger.addHandler(_stream)
+logger = get_logger(__name__)
 
 
 class Command(BaseCommand):
@@ -35,7 +27,6 @@ class Command(BaseCommand):
     can_import_settings = True
     requires_model_validation = True
     children = []  # list of worker processes
-    jobs = OrderedDict()
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -113,7 +104,9 @@ class Command(BaseCommand):
         logger.info("Starting to work... (press ^C to exit)")
         try:
             for child in self.children:
-                os.waitpid(child, 0)
+                child.start()
+            for child in self.children:
+                child.join()
         except KeyboardInterrupt:
             sys.exit(0)
 
@@ -124,7 +117,10 @@ class Command(BaseCommand):
         """Stop child processes after receiving SIGTERM"""
         def handler(sig, func=None):
             for child in self.children:
-                os.kill(child, signal.SIGINT)
+                try:
+                    child.terminate()
+                except AttributeError:
+                    pass
             sys.exit(0)
         signal.signal(signal.SIGTERM, handler)
 
@@ -140,42 +136,37 @@ class Command(BaseCommand):
         if worker_count == 1 and not workers:
             return BeanstalkWorker('default', job_list).work()
 
-        # spawn children and make them work (hello, 19th century!)
-        def make_worker(name, jobs):
-            child = os.fork()
-            try:
-                # reinit crypto modules after fork
-                # http://stackoverflow.com/questions/16981503/pycrypto-assertionerrorpid-check-failed-rng-must-be-re-initialized-after-fo
-                import Crypto
-                Crypto.Random.atfork()
-            except:
-                pass
-            if child:
-                self.children.append(child)
-            else:
-                BeanstalkWorker(name, jobs).work()
-            logger.info(
-                "Available jobs (worker '%s'):\n%s",
-                name,
-                "\n".join("  * %s" % k for k in jobs.keys()),
-            )
         if job_list:
             for i in range(worker_count):
-                make_worker('default', job_list)
+                self.children.append(Process(target=self.make_worker, args=('default', job_list)))
         for key, job_list in workers.items():
             for i in range(self.get_workers_count(key)):
-                make_worker(key, job_list)
+                self.children.append(Process(target=self.make_worker, args=(key, job_list)))
         logger.info("Spawned %d workers", len(self.children))
+
+    def make_worker(self, name, jobs):
+        BeanstalkWorker(name, jobs).work()
 
 
 class BeanstalkWorker(object):
+
     def __init__(self, name, jobs):
         self.name = name
         self.jobs = jobs
 
+    def _crypto_atfork(self):
+        try:
+            # reinit crypto modules after fork
+            # http://stackoverflow.com/questions/16981503/pycrypto-assertionerrorpid-check-failed-rng-must-be-re-initialized-after-fo
+            import Crypto
+            Crypto.Random.atfork()
+        except:
+            pass
+
     def work(self):
         """children only: watch tubes for all jobs, start working"""
 
+        self._crypto_atfork()
         self.init_beanstalk()
 
         logger.info(
@@ -237,7 +228,10 @@ class BeanstalkWorker(object):
         try:
             job_obj.call(job)
             logger.debug("j:%s, done->delete", job.jid)
-            job.delete()
+            try:
+                job.delete()
+            except beanstalkc.CommandFailed:
+                logger.warning("j:%s, job.delete failed", job.jid)
         except KeyboardInterrupt:
             raise
         except Exception as e:
@@ -245,16 +239,13 @@ class BeanstalkWorker(object):
             if not isinstance(e, job_obj.ignore_exceptions):
                 logger.exception(e)
             releases = stats['releases']
-            if releases >= JOB_FAILED_RETRY:
+            if releases >= job_obj.job_failed_retry:
                 logger.info('j:%s, failed->bury', job.jid)
-                try:
-                    job_obj.on_bury(job, e)
-                except Exception as e:
-                    logger.info('j:%s, on_bury failed', job.jid)
-                    logger.exception(e)
+                job_obj.on_bury(job, e)
                 job.bury()
                 return
             else:
-                delay = (releases or 0.1) * JOB_FAILED_RETRY_AFTER
+                delay = (releases or 0.1) * job_obj.job_failed_retry_after
                 logger.info('j:%s, failed->retry with delay %ds', job.jid, delay)
+                job_obj.on_retry(job, e)
                 job.release(delay=delay)

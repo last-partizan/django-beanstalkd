@@ -2,6 +2,9 @@
 Django Beanstalk Interface
 """
 from __future__ import absolute_import
+import os
+import logging
+
 from django.conf import settings
 
 from beanstalkc import Connection, SocketError, DEFAULT_PRIORITY, DEFAULT_TTR
@@ -9,6 +12,16 @@ from beanstalkc import Connection, SocketError, DEFAULT_PRIORITY, DEFAULT_TTR
 from .decorators import beanstalk_job
 
 __all__ = ['beanstalk_job', 'connect_beanstalkd']
+
+
+def get_logger(name):
+    logger = logging.getLogger('django_beanstalkd')
+    if not logger.handlers:
+        stream = logging.StreamHandler()
+        if "JOURNAL_STREAM" not in os.environ:
+            stream.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(message)s'))
+        logger.addHandler(stream)
+    return logger
 
 
 def connect_beanstalkd():

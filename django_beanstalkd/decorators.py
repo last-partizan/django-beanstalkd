@@ -1,10 +1,20 @@
 from __future__ import absolute_import
-from builtins import object
 import importlib
+import logging
 
 from django import db
+from django.conf import settings
 
 from . import json_decoder
+
+
+logger = logging.getLogger(__name__)
+JOB_FAILED_RETRY = getattr(
+    settings, 'BEANSTALK_JOB_FAILED_RETRY', 3,
+)
+JOB_FAILED_RETRY_AFTER = getattr(
+    settings, 'BEANSTALK_JOB_FAILED_RETRY_AFTER', 60,
+)
 
 
 class _beanstalk_job(object):
@@ -15,11 +25,16 @@ class _beanstalk_job(object):
     _on_bury = None
 
     def __init__(self, f,
-                 worker='default', json=False,
-                 takes_job=False, require_db=False,
+                 worker='default',
+                 json=False,
+                 takes_job=False,
+                 require_db=False,
                  ignore_reserve_timeout=False,
                  on_bury=None,
+                 on_retry=None,
                  ignore_exceptions=tuple(),
+                 job_failed_retry=JOB_FAILED_RETRY,
+                 job_failed_retry_after=JOB_FAILED_RETRY_AFTER,
                  ):
         self.f = f
         self.__name__ = f.__name__
@@ -29,7 +44,10 @@ class _beanstalk_job(object):
         self.require_db = require_db
         self.ignore_reserve_timeout = ignore_reserve_timeout
         self.ignore_exceptions = ignore_exceptions
+        self.job_failed_retry = job_failed_retry
+        self.job_failed_retry_after = job_failed_retry_after
         self._on_bury = on_bury
+        self._on_retry = on_retry
 
         # determine app name
         parts = f.__module__.split('.')
@@ -63,9 +81,20 @@ class _beanstalk_job(object):
         return self.f(*args, **kwargs)
 
     def on_bury(self, job, exception):
-        if self._on_bury:
-            args, kwargs = self.get_args(job)
-            self._on_bury(exception, *args, **kwargs)
+        try:
+            if self._on_bury:
+                args, kwargs = self.get_args(job)
+                self._on_bury(exception, *args, **kwargs)
+        except Exception:
+            logger.exception("j:%s: on_bury failed", job.jid)
+
+    def on_retry(self, job, exception):
+        try:
+            if self._on_retry:
+                args, kwargs = self.get_args(job)
+                self._on_retry(exception, *args, **kwargs)
+        except Exception:
+            logger.exception("j:%s: on_retry failed", job.jid)
 
 
 def beanstalk_job(func=None, *args, **kwargs):
